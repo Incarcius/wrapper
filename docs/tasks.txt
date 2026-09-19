@@ -1,0 +1,40 @@
+Livox Pipeline Wrapper - Remaining Tasks
+
+1. Setup ROS2 Ingestion Backend (livox_interface.py)
+   - We are using the recommended `ros2` ingestion mode instead of the bare SDK.
+   - Prerequisites:
+     a) ROS2 (e.g., Foxy, Humble, or whatever matches your Jetpack version) installed on Jetson Nano.
+     b) The standard Livox-SDK (C++ version) compiled and installed on the Jetson.
+     c) `livox_ros_driver` built in your ROS2 workspace, running and publishing to `/livox/lidar`.
+     d) The `rclpy` and `sensor_msgs_py` Python packages (usually included with ROS2).
+   - Action: Verify the driver can successfully publish point clouds from the Mid-70.
+
+2. Integrate the ML Classification Model (run_pipeline.py)
+   - We have decided on using a DGCNN classification model. The wrapper has been updated to format the output as a (1, 3, 1024) tensor.
+   - Prerequisites:
+     a) PyTorch (`torch`) installed in your Python environment.
+     b) A trained DGCNN PyTorch model (e.g., a `.pt` or `.pth` weights file) that accepts (B, C, N) point cloud inputs.
+     c) The model class definition for DGCNN available in your codebase to load the weights.
+   - Action: Add the PyTorch model loading code in `run_pipeline.py` and pass `dgcnn_input` into the model to get the classification prediction.
+
+3. Resolve Jetson Nano Dependencies (ARM64)
+   - The wrapper uses packages that can be tricky to compile on ARM64 architectures.
+   - Prerequisites:
+     a) Python 3.x environment on Jetpack/Ubuntu.
+     b) `numpy` and `pyyaml` (easily installed via pip).
+     c) `scikit-learn` (only needed if you decide to use DBSCAN instead of Open3D statistical outlier removal).
+   - Action: Ensure `open3d>=0.18` and `torch` can be installed on the Jetson Nano. You may need specific pre-compiled `.whl` files for Jetpack to avoid building them from source.
+
+4. Run and Validate the Test Suite
+   - Ensure the pipeline logic works locally before deploying to the drone.
+   - Prerequisites:
+     a) `pytest` installed via pip.
+     b) All main dependencies (`numpy`, `open3d`) installed in your development environment.
+   - Action: Run `pytest test_pipeline.py` in your development environment to ensure all components behave as expected.
+
+5. Add Building Footprint Cropping (Optional)
+   - The DALi-CGAN paper mentioned cropping point clouds using building footprints.
+   - Prerequisites:
+     a) Geospatial boundary coordinates for the buildings you want to scan.
+     b) A library like `PDAL` or `shapely` if complex polygons are needed (otherwise the current `roi_filter` bounding box in `pipeline_config.yaml` is sufficient).
+   - Action: If necessary for your outdoor architecture use-case, feed bounding box coordinates to the `roi_filter` before the pipeline starts.

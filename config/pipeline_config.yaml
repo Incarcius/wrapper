@@ -1,0 +1,57 @@
+# Pipeline configuration - tune these on-device with real flight data.
+# Every stage is toggleable so you can profile latency stage-by-stage on the Nano.
+
+ingestion:
+  mode: "ros2"            # "ros2" | "sdk"  (ros2 = livox_ros_driver topic, sdk = direct livox_sdk bindings)
+  ros2_topic: "/livox/lidar"
+  frame_queue_size: 2      # bounded queue; older frames are dropped, not processed late
+  drop_stale_after_sec: 0.15  # if a frame waits longer than this, drop it instead of processing
+
+roi_filter:
+  enabled: true
+  mode: "box"              # "box" | "range" | "none"
+  # --- IMPORTANT FOR PRODUCTION (CITY SCALE) ---
+  # The limits below (±10m) are heavily shrunk for indoor classroom PoW testing.
+  # When transitioning to city-scale flights, you MUST expand these (e.g. ±100m)
+  # AND increase `voxel_size_m` significantly so the Orin Nano doesn't crash.
+  # ---------------------------------------------
+  # box filter in sensor/body frame, meters
+  x_min: -10.0
+  x_max: 10.0
+  y_min: -10.0
+  y_max: 10.0
+  z_min: -2.0
+  z_max: 3.0
+  # range filter alternative
+  max_range_m: 40.0
+
+outlier_removal:
+  method: "open3d_statistical"   # "open3d_statistical" | "open3d_radius" | "dbscan" | "none"
+  # open3d statistical outlier removal
+  nb_neighbors: 16
+  std_ratio: 1.5
+  # open3d radius removal (cheaper, good default on Nano)
+  radius_nb_points: 6
+  radius: 0.6
+  # DBSCAN (paper defaults) - slow on Jetson Nano for full frames, use only if latency budget allows
+  # or on pre-downsampled clouds
+  dbscan_eps: 0.5
+  dbscan_min_points: 10
+  pre_voxel_downsample_for_dbscan: 0.15   # voxel size (m) applied before DBSCAN to keep it tractable
+
+normalization:
+  center: true              # zero-mean centering (subtract centroid)
+  scale_to_unit_sphere: true
+
+downsampling:
+  voxel_size_m: 0.15         # first-pass voxel downsample to bound point count before FPS
+  target_points: 1024        # final FPS output size
+  method: "open3d_fps"       # "open3d_fps" | "random" (random = fallback if too few points survive)
+
+output:
+  format: "numpy"            # "numpy" | "torch"
+  dtype: "float32"
+
+logging:
+  log_stage_timings: true    # per-stage latency logging, useful for Nano profiling
+  log_every_n_frames: 30

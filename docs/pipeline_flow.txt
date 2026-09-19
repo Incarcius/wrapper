@@ -1,0 +1,36 @@
+Livox Wrapper -> DGCNN Pipeline Flow
+====================================
+
+This document outlines the exact step-by-step journey of the point cloud data from the Livox Mid-70 sensor all the way into the DGCNN classification model.
+
+1. Data Ingestion (Hardware to Wrapper)
+   - The Livox Mid-70 LiDAR spins and collects raw point cloud data.
+   - The C++ `livox_ros_driver` talks to the hardware, packages the data into standardized ROS2 `PointCloud2` messages, and publishes them to the `/livox/lidar` topic.
+   - Inside the wrapper, `livox_interface.py` runs a background thread that subscribes to this topic. It unpacks the binary ROS message into a flat (N, 3) NumPy array representing the X, Y, Z coordinates of every laser bounce.
+
+2. Region of Interest (ROI) Filtering
+   - The raw (N, 3) array enters `pipeline.py`. 
+   - Before doing any heavy math, the pipeline instantly drops any points that fall outside a specific physical box (e.g., ignoring everything further than 30 meters away). This saves precious compute time on the Jetson Nano.
+
+3. Outlier and Noise Removal
+   - The point cloud still has "ghost" points or floating dust/noise.
+   - The wrapper runs an outlier removal algorithm (you can toggle between fast Statistical Outlier Removal or the DBSCAN clustering method used in the DALi-CGAN paper).
+   - Isolated points that don't belong to a dense cluster (like your chair or table) are deleted.
+
+4. Data Normalization (Zero-mean Centering & Scaling)
+   - Neural networks hate unnormalized data. If a chair is at coordinates (10, 5, -2), the model might get confused.
+   - The wrapper calculates the exact center of the object and subtracts it from all points, moving the object perfectly to (0, 0, 0).
+   - It then finds the furthest point from the center and scales the entire object down so that the maximum distance is exactly 1.0 (fitting the object into a "unit sphere").
+
+5. Farthest Point Sampling (FPS) Downsampling
+   - DGCNN requires a fixed number of input points (exactly 1024). A raw point cloud might have 5,000 or 50,000 points.
+   - Instead of randomly dropping points (which could delete the entire leg of a chair), the wrapper uses FPS to strategically select 1024 points that perfectly preserve the global outline and structure of the object.
+
+6. DGCNN Matrix Formatting
+   - The pipeline finishes and outputs a clean (1024, 3) matrix.
+   - PyTorch models like DGCNN specifically expect the shape of the data to be (Batch_Size, Channels, Num_Points).
+   - In `run_pipeline.py`, the wrapper takes the (1024, 3) matrix, transposes it, and adds a batch dimension to create a final tensor shaped exactly (1, 3, 1024).
+
+7. DGCNN Classification (Inference)
+   - This (1, 3, 1024) tensor is fed directly into your pre-trained DGCNN model.
+   - The model constructs a dynamic graph using EdgeConv, extracts the features, and outputs a prediction probability (e.g., 98% confident it is a "Chair").

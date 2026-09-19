@@ -1,0 +1,12 @@
+numpy>=1.23
+open3d>=0.18       # provides fast statistical/radius outlier removal and C++ FPS
+scikit-learn>=1.2  # only needed if outlier_removal.method == "dbscan"
+pyyaml>=6.0
+torch>=2.0         # Required for DGCNN inference in PyTorch
+#
+# ROS2 ingestion (mode: "ros2") is provided by your ROS2 distro + livox_ros_driver,
+# not pip — install per: https://github.com/Livox-SDK/livox_ros_driver
+# rclpy and sensor_msgs_py come from the ROS2 install itself.
+#
+# SDK ingestion (mode: "sdk") requires the Livox SDK Python bindings matching
+# your firmware/SDK version — see https://github.com/Livox-SDK/Livox-SDK
