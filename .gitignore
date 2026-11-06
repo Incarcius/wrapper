@@ -1,37 +1,69 @@
-# Python
+# Repository-root ignores. Each subproject keeps its own .gitignore for rules
+# that are specific to it — note in particular that wrapper/.gitignore has a
+# blanket `data/` rule, which is correct there and is deliberately NOT repeated
+# here, because pointcloud-ml/data/label_map.yaml is the versioned class
+# vocabulary and must be committed.
+
+# --- Python ------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *.egg-info/
 build/
 dist/
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
 
-# Virtual environments / local settings
+# --- Environments ------------------------------------------------------------
 .env
 venv/
 .venv/
+env/
 
-# Editors
+# --- Editors / tooling / agent-local state -----------------------------------
 .idea/
 .vscode/
+# Per-machine Claude Code settings, not project configuration.
+.claude/settings.local.json
 
-# Logs
-*.log
+# --- OS / OneDrive -----------------------------------------------------------
+desktop.ini
+Thumbs.db
+.DS_Store
 
-# Model weights and exported engines (share via storage/releases, not git)
+# --- Generated documents at the repository root ------------------------------
+# The markdown under pointcloud-ml/docs/ is the source of record; PDF exports of
+# it are regenerable and would only drift. Anything unrelated to the project
+# that happens to be sitting in this folder also stays out.
+/*.pdf
+
+# --- Trained weights and compiled engines ------------------------------------
+# Shared via releases or object storage, never git. pointcloud-ml/artifacts/
+# also has its own .gitignore explaining that the engines currently there hold
+# randomly initialised weights.
 *.pt
 *.pth
+*.ckpt
 *.onnx
 *.engine
+*.plan
+*.trt
 
-# Recorded or captured LiDAR data
-data/
+# --- Recorded sensor data ----------------------------------------------------
+# Raw recordings are large and are the input to a reproducible pipeline, not an
+# output of it. The manifests and the label map ARE versioned.
+pointcloud-ml/data/raw/
+pointcloud-ml/data/processed/
 *.pcd
+*.ply
 *.bag
 *.db3
 *.mcap
 rosbag2_*/
 
-# ROS 2 workspace output, if colcon is ever run inside this repo
-install/
-log/
+# --- Experiment outputs ------------------------------------------------------
+# Checkpoints and run directories are regenerable from (config + seed + data).
+# reports/*.json and reports/*.md are results and ARE versioned.
+pointcloud-ml/runs/
+pointcloud-ml/checkpoints/
+*.log

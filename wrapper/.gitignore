@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# Virtual environments / local settings
+.env
+venv/
+.venv/
+
+# Editors
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# Model weights and exported engines (share via storage/releases, not git)
+*.pt
+*.pth
+*.onnx
+*.engine
+
+# Recorded or captured LiDAR data
+data/
+*.pcd
+*.bag
+*.db3
+*.mcap
+rosbag2_*/
+
+# ROS 2 workspace output, if colcon is ever run inside this repo
+install/
+log/

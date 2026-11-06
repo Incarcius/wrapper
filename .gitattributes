@@ -1,18 +1,32 @@
 # This code runs on Linux (Jetson Orin Nano) even when edited on Windows.
-# Force LF endings so a checkout with core.autocrlf=true can't produce a
-# CRLF shell script ("/bin/bash^M: bad interpreter") when copied to the Jetson.
+# Force LF endings so a checkout with core.autocrlf=true cannot produce a CRLF
+# shell script ("/bin/bash^M: bad interpreter") when copied to the Jetson.
+#
+# Applies repository-wide; wrapper/.gitattributes repeats these for anyone who
+# vendors that directory on its own.
 * text=auto eol=lf
 
 *.sh    text eol=lf
 *.py    text eol=lf
 *.yaml  text eol=lf
+*.yml   text eol=lf
+*.json  text eol=lf
 *.md    text eol=lf
+*.toml  text eol=lf
 
-# Binary artefacts that may appear later
-*.pt    binary
-*.pth   binary
-*.onnx  binary
+# Binary artefacts, so git neither diffs nor munges line endings in them.
+*.pt     binary
+*.pth    binary
+*.ckpt   binary
+*.onnx   binary
 *.engine binary
-*.pcd   binary
-*.bag   binary
-*.db3   binary
+*.plan   binary
+*.trt    binary
+*.npy    binary
+*.npz    binary
+*.pcd    binary
+*.ply    binary
+*.bag    binary
+*.db3    binary
+*.mcap   binary
+*.pdf    binary
