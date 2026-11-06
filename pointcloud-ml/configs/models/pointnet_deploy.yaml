@@ -1,0 +1,26 @@
+# Deployment candidate: compact PointNet.
+#
+# Selected for the per-cluster task because the per-frame cost is M clusters x one
+# shared-MLP pass with zero neighbourhood searches, and because every operation
+# here is TensorRT-native (Conv1d / BatchNorm1d / ReLU / ReduceMax / Gemm).
+# Reasoning in full: docs/task_definition.md §9.
+#
+# num_classes is NOT in this file. It comes from label_map.yaml so a checkpoint
+# can never disagree with its label map about K.
+
+model:
+  name: "pointnet"
+  in_channels: 3              # xyz only; the wrapper discards intensity at ingestion
+  widths: [64, 64, 64, 128, 512]   # last entry is the global embedding width
+  head_widths: [256, 128]
+  dropout: 0.3
+  aux_dim: 0                  # set to 6 when preprocess.features.use_aux is true
+  use_input_tnet: false       # ablation; does not give rotation invariance
+  use_feature_tnet: false     # ablation; expensive (64x64 regression + bmm)
+
+deployment:
+  input_layout: "bcn"         # (B, 3, N) for Conv1d reference implementations
+  device: "cuda"              # verify torch.cuda.is_available() on the Jetson first
+  precision: "fp16"           # fp32 | fp16 | int8 — measure all three (Phase Seven)
+  warmup_frames: 10           # mandatory: the first CUDA call on Jetson can take seconds
+  max_batch: 16               # must match clustering.max_clusters_per_frame

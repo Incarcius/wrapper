@@ -1,0 +1,167 @@
+# Class vocabulary — CONFIRMED by the project owner, 15 Oct 2026.
+#
+# This file is the artifact of record. K is derived from it; no model config and
+# no script contains a class count. A checkpoint is versioned together with the
+# label map it was trained against, and a checkpoint without its map is unusable.
+#
+# RULES
+#   - class_id values are contiguous from 0, and are NEVER reused or reordered.
+#     Reordering silently invalidates every existing checkpoint.
+#   - class_id -1 is reserved for the reject outcome and never appears in
+#     `classes`.
+#   - `definition` and `annotation_policy` are load-bearing, not documentation
+#     garnish: they are what makes two annotators agree, and what makes a
+#     confusion matrix interpretable six months from now.
+#
+# Scene: college cricket / football field. Classes were selected so that every
+# one is physically resolvable by a Livox Mid-70 at a safe flight altitude —
+# see docs/data_collection_plan.md §1 and reports/sensor_feasibility.json.
+# Deliberately excluded as unresolvable: cricket ball (~0.8 m max range), cricket
+# stumps (~5 m), bags and small equipment (~7 m), painted line markings.
+
+version: 1
+created: "2026-10-15"
+source: >
+  Project owner, confirmed 15 Oct 2026, from the 6-class proposal in
+  docs/data_collection_plan.md §2. Scene is a college cricket/football field.
+
+# --- Reject handling (see docs/task_definition.md §3) ------------------------
+reject:
+  reserved_class_id: -1
+  reserved_class_name: "unknown"
+
+  # PROVISIONAL: 0.0 disables rejection. The real value comes from the
+  # precision/recall-vs-threshold curve on the held-out set, never from a guess.
+  confidence_threshold: 0.0
+
+  # false = `unknown` is an OUTPUT of thresholding, not a trained class.
+  #
+  # Starting here on purpose. A trained "background" class built from an
+  # arbitrary grab-bag of negatives tends to absorb the rare real classes,
+  # which is precisely the failure this project cannot afford (vehicle will be
+  # the rarest class, see below). Negatives are still collected and labelled
+  # `unknown` — they are used to calibrate the threshold rather than to train a
+  # class.
+  #
+  # OPEN DECISION: residual ground fragments are expected to be the dominant
+  # source of false positives (docs/data_collection_plan.md §3, the sparse-field
+  # regime). If threshold-only rejection does not suppress them, promoting
+  # `ground_residue` to a trained 7th class is the first thing to try. Revisit
+  # once there is a measured confusion matrix.
+  trained_as_class: false
+
+classes:
+  - class_id: 0
+    name: "person"
+    definition: >
+      A single human body: player, umpire, coach or bystander. Standing,
+      walking, running, sitting or crouching. Includes any carried kit that is
+      inseparable from the body in the returns (bat, gloves, helmet).
+    annotation_policy: >
+      Label a cluster `person` when it is one individual. When two or more
+      people stand close enough that DBSCAN merges them into a single cluster,
+      STILL label it `person` and set `merged_instances` to the number of people
+      involved. Rationale: the downstream signal that matters is "a human is
+      here", so recall on humans is preserved; recording the merge count lets
+      the evaluation report merged and single cases separately instead of hiding
+      the failure. Do not label a person who is more than half occluded by a
+      vehicle, wall or net — use `unknown`.
+    expected_extent_m: [1.2, 2.1]
+    notes: >
+      The binding class for flight planning: resolvable to ~12 m side-on but
+      only ~8 m from directly above. Expect this class to be scarcer than
+      vegetation and pole.
+
+  - class_id: 1
+    name: "vegetation"
+    definition: >
+      Perimeter trees, shrubs and hedges. Trunk and canopy together count as one
+      object when they arrive in one cluster.
+    annotation_policy: >
+      A hedge or treeline that arrives as one extended cluster is still
+      `vegetation`; set `extended: true` when its longest horizontal extent
+      exceeds 6 m, so these can be analysed apart from individual trees. Mown
+      grass is never `vegetation` — it is ground, and is removed before
+      clustering. If grass survives ground removal and forms a cluster, that is
+      `unknown`, not vegetation.
+    expected_extent_m: [1.0, 15.0]
+    notes: >
+      Volumetric and irregular, so geometrically well separated from `pole` and
+      `structure`. Likely the easiest class, and likely over-represented.
+
+  - class_id: 2
+    name: "pole"
+    definition: >
+      Thin vertical structures: floodlight masts, goalpost uprights and
+      crossbars, fence posts, sightscreen and net frames, flagpoles.
+      Characteristically tall with a horizontal cross-section under ~0.5 m.
+    annotation_policy: >
+      A mast and its attached floodlight head in one cluster is `pole`. A
+      complete football goal — uprights plus crossbar — is `pole`, not
+      `structure`, because its geometry is thin-linear rather than planar; set
+      `subtype: goal` so goals can be evaluated separately later. If the
+      attached netting dominates the cluster, label `net_fence` instead.
+    expected_extent_m: [1.0, 15.0]
+    notes: >
+      Near-rotationally-symmetric, so viewpoint matters little — few bearings
+      needed per instance.
+
+  - class_id: 3
+    name: "structure"
+    definition: >
+      Large planar built surfaces: pavilion, perimeter wall, dugout, scoreboard,
+      storage shed, concrete steps and permanent seating blocks.
+    annotation_policy: >
+      Label `structure` when the cluster is planar or boxy and spans more than
+      ~2 m in two dimensions. A wall seen as a long strip is `structure` even
+      when only a fragment is in view. Benches and movable seating are
+      `unknown`, not `structure`, unless permanently fixed — they are too small
+      to be reliable and were excluded from the vocabulary.
+    expected_extent_m: [2.0, 30.0]
+    notes: >
+      Resolvable furthest of all classes (~59 m single-frame), so it will appear
+      at ranges where nothing else does.
+
+  - class_id: 4
+    name: "net_fence"
+    definition: >
+      Permeable mesh surfaces: cricket practice nets, boundary fencing, cage
+      mesh, safety netting.
+    annotation_policy: >
+      The beam passes partly through mesh, so returns come from both the near
+      and the far surface and clusters look hollow or double-walled. That
+      appearance is the class signature — label it `net_fence`, do not treat it
+      as noise. Edge-on views are the hard case and are easily mistaken for
+      `pole`: label edge-on mesh `net_fence` and set `edge_on: true`. When a
+      supporting frame and its mesh arrive in one cluster, the dominant point
+      population decides between `pole` and `net_fence`.
+    expected_extent_m: [2.0, 20.0]
+    notes: >
+      The class most likely to confuse with `structure` (both planar) and `pole`
+      (edge-on). Watch its row in the confusion matrix specifically.
+
+  - class_id: 5
+    name: "vehicle"
+    definition: >
+      Cars, vans, motorbikes and groundskeeping machinery such as the pitch
+      roller or mower, parked or stationary at the field edge.
+    annotation_policy: >
+      Label `vehicle` when more than roughly half the body is visible;
+      otherwise `unknown`. A vehicle parked tight against a wall will often
+      merge with it — when the cluster is mostly wall, label `structure`.
+    expected_extent_m: [1.5, 6.0]
+    notes: >
+      Expected to be the RAREST class: a college field may offer only three or
+      four distinct vehicles. If fewer than ~10 distinct instances can be
+      collected, fold this into `unknown` rather than shipping a class that only
+      recognises one specific car (docs/data_collection_plan.md §4.4).
+
+# --- Loss weighting ---------------------------------------------------------
+# Computed from the training-split class distribution once it exists, and
+# recorded here so an experiment is reproducible from config alone.
+# null = unweighted cross-entropy.
+#
+# Severe imbalance is expected (vegetation and pole in nearly every frame,
+# vehicle in very few), which is why macro-F1 is the selection metric rather
+# than overall accuracy — see docs/task_definition.md §7.
+class_weights: null

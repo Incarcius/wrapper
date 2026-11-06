@@ -1,0 +1,66 @@
+# Deploy config for ClusterClassifier — PLACEHOLDER WEIGHTS, REAL VOCABULARY.
+#
+# This file exists so the end-to-end path (clean scene -> ground removal ->
+# clusters -> batched forward pass -> FramePrediction -> ROS 2) is runnable and
+# measurable while the remaining owner-blocked item is outstanding.
+#
+# Status of the two blockers from docs/task_definition.md:
+#
+#   * P1, the class list  — RESOLVED, 15 Oct 2026. data/label_map.yaml is
+#     confirmed by the owner: K = 6 (person, vegetation, pole, structure,
+#     net_fence, vehicle), with class_id -1 / "unknown" reserved as the reject
+#     OUTPUT and never a trained class.
+#   * P2, the labelled data — STILL OPEN. No labels means no training run, so
+#     there is no checkpoint and `checkpoint:` below is null.
+#
+# So the vocabulary is real and the weights are not. ClusterClassifier builds
+# the head at K = 6 from the label map, initialises it randomly, and sets
+# `is_placeholder: true` on every FramePrediction, because a real class name
+# attached to a random argmax is more misleading than a synthetic one, not less.
+#
+# WHAT THIS CONFIG CAN MEASURE:   latency, memory, batch shapes, publisher
+#                                 plumbing, determinism, failure handling.
+# WHAT IT CANNOT MEASURE:         anything about accuracy. A prediction of
+#                                 "person" here means the random weights put
+#                                 the largest logit at index 0. Nothing more.
+#
+# To make this a real deployment config: copy it and set `checkpoint:` to the
+# trained weights, which must have been trained against this exact label map
+# (compare its sha256, which LabelMap records).
+
+# Paths are resolved relative to THIS file's directory, so a config and the
+# artifacts it names move together.
+
+checkpoint: null              # PLACEHOLDER: no trained weights exist (P2 still open).
+                              # Set to e.g. ../runs/<exp>/best.pt for a real run.
+
+# The confirmed vocabulary, and the only source of K. The model config
+# deliberately does not contain a class count, so a checkpoint cannot disagree
+# with its label map about K.
+label_map: ../data/label_map.yaml
+
+# The preprocessing contract, shared with training. Its hash is recorded next to
+# a checkpoint: evaluating with one preprocess.yaml and deploying with another is
+# a silent accuracy bug.
+preprocess: preprocess.yaml
+
+# Architecture. num_classes is NOT here — it comes from the label map.
+model_config: models/pointnet_deploy.yaml
+
+deployment:
+  input_layout: "bcn"         # (B, 3, N) for the Conv1d reference implementations
+  device: "cpu"               # "cuda" on the Jetson; "auto" picks cuda when available.
+                              # A cuda request with no CUDA falls back to CPU and says so.
+  warmup_frames: 10           # mandatory before timing: the first CUDA call on a
+                              # Jetson can take seconds
+  max_clusters: 16            # must equal preprocess clustering.max_clusters_per_frame;
+                              # the preallocated (max_clusters, 3, 1024) batch is sized from it
+  reject_threshold: null      # null = take it from the label map's reject section, which
+                              # is the right default: the threshold is part of the
+                              # vocabulary's contract, not of this deployment.
+                              # That value is currently 0.0, which DISABLES rejection by
+                              # design — a real threshold can only come from a
+                              # precision/recall-vs-threshold curve on held-out data, and
+                              # there is no trained model to draw one from yet. So every
+                              # cluster gets a class and none is rejected; that is
+                              # deliberate config, not a dead branch.

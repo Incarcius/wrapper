@@ -1,0 +1,97 @@
+# Preprocessing configuration.
+#
+# This file is part of the model artifact. A checkpoint evaluated with one
+# preprocess.yaml and deployed with another is a silent accuracy bug, so the
+# training manifest records this file's hash alongside the checkpoint.
+#
+# Every length is in METRES, applied BEFORE normalisation. That ordering is the
+# fix for the wrapper's C1 defect; see docs/wrapper_audit.md.
+
+seed: 0                       # all sampling is deterministic given this seed (finding A1)
+
+# --- How the scene is divided into things to classify ------------------------
+# The ONE stage that does not survive a change of domain, so it is pluggable.
+#   dbscan_instances -> discrete objects (the field proof-of-concept)
+#   ground_tiles     -> fixed patches of surface (agriculture, road quality)
+# Everything downstream is identical either way: both return the same region
+# records. See src/pcml/data/regions.py and docs/domain_roadmap.md.
+region_proposal:
+  method: "dbscan_instances"
+
+  # --- dbscan_instances ---
+  eps_m: 0.5                  # DBSCAN neighbourhood radius, metres
+  min_samples: 10             # DBSCAN core-point threshold
+  min_region_points: 50       # below this, decline to classify rather than guess
+  max_regions: 16             # PROVISIONAL: bounds worst-case latency.
+                              # Re-derive from measured region-count distributions
+                              # on real recordings (task_definition.md P6).
+  use_open3d: true            # Open3D's C++ cluster_dbscan; much faster on-device
+
+  # --- ground_tiles (unused while method is dbscan_instances; kept so one file
+  #     can carry both domains' settings) ---
+  tile_size_m: 2.0            # the scale at which a label is defined
+  overlap_factor: 1           # k>1 adds k^2-1 shifted grids so a feature on a
+                              # tile boundary still lands whole in some tile.
+                              # Cost scales as k^2.
+
+clustering:
+  # DEPRECATED alias kept for the wrapper's config compatibility. Superseded by
+  # region_proposal above; do not add new keys here.
+  enabled: true               # false = whole-scene mode; debugging only, see C2
+
+sampling:
+  num_points: 1024            # per cluster. ModelNet convention, shared by all candidates
+  voxel_size_m: 0.05          # voxel pre-pass in METRES, bounds FPS cost.
+                              # null disables it. Declined automatically if it would
+                              # leave fewer than num_points.
+  use_open3d: true            # false for export-parity tests (reproducible NumPy FPS)
+
+normalization:
+  center: true                # per-cluster centroid subtraction
+  scale_to_unit_sphere: true  # per-cluster max-radius scaling
+
+features:
+  # Scale-carrying auxiliary features concatenated at the classifier head.
+  # Unit-sphere normalisation discards absolute size, which for LiDAR objects is
+  # a strong cue. ABLATION: must beat the xyz-only baseline to stay enabled.
+  use_aux: false              # set true for the aux-feature arm of the ablation
+  # Order is fixed by pcml.data.clustering.AUX_FEATURE_NAMES and is part of the
+  # model contract: changing it requires a retrain.
+
+augmentation:
+  # Applied at training time only. Deliberately conservative: augmentations that
+  # violate the sensor's real geometry teach the model to expect scenes it will
+  # never see.
+  yaw_degrees: 180.0          # +/- full yaw: clusters arrive at arbitrary heading
+  pitch_roll_degrees: 10.0    # small only — the drone is roughly level
+  translation_m: 0.0          # pointless after per-cluster centring
+  scale_range: [0.9, 1.1]     # limited: object size is semantically meaningful
+  point_dropout_max: 0.25     # simulates sparser returns at longer range
+  jitter_sigma_m: 0.01        # ~Mid-70 ranging noise, metres
+  jitter_clip_m: 0.03
+  occlusion_dropout_max: 0.0  # PROVISIONAL off: needs a half-space removal op
+
+ground_removal:
+  # MANDATORY for the sports-field scene, not an ablation. Measured in
+  # tests/test_ground.py: with the ground left in, a mown field either bridges
+  # every object into one field-sized cluster (at realistic density) or shatters
+  # into object-sized false objects (at low density). Either way, per-cluster
+  # classification is impossible. See docs/data_collection_plan.md §3.
+  enabled: true
+  method: "ransac_plane"            # pcml.data.ground.remove_ground
+  distance_threshold_m: 0.15        # inlier half-thickness; suits mown grass + noise
+  num_iterations: 200
+  max_tilt_deg: 30.0                # horizontality gate: stops the fit latching onto
+                                    # the pavilion wall or a practice net
+  min_inlier_fraction: 0.15         # below this, report NO plane and delete nothing
+  min_height_m: 0.15                # extra clearance that trims the ground skirt at
+                                    # the base of each object — the skirt is what
+                                    # otherwise bridges two adjacent clusters
+
+accumulation:
+  # Mid-70's non-repetitive rosette densifies clouds over time — the cheapest
+  # accuracy lever available. Requires motion compensation when moving, and the
+  # Mid-70 has no IMU. Ablate while stationary; gains do NOT transfer to flight
+  # until deskewing exists.
+  enabled: false
+  n_frames: 1

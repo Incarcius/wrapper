@@ -1,0 +1,52 @@
+# TEMPLATE — copy to label_map.yaml and fill in.
+#
+# This file is the artifact of record for the class vocabulary. A checkpoint
+# without its label map is unusable, so the two are versioned together and the
+# training manifest records this file's hash.
+#
+# Rules:
+#   - class_id values are contiguous from 0 and never reused or reordered.
+#     Reordering silently invalidates every existing checkpoint.
+#   - K (num_classes) is derived from this file. It is never written in a model
+#     config or passed as a literal.
+#   - `definition` and `annotation_policy` are not documentation niceties: they
+#     are what makes two annotators agree, and what makes a confusion matrix
+#     interpretable six months later.
+#
+# The class list has NOT been supplied yet (task_definition.md P1). The entries
+# below are structural placeholders, NOT a proposed vocabulary.
+
+version: 1
+created: null              # ISO date, filled when the real map is written
+source: null               # who defined this vocabulary, and from what requirement
+
+# Reject handling. See task_definition.md §3.
+reject:
+  # class_id -1 is reserved and never appears below: it is the *output* of
+  # rejecting, not a trained class.
+  reserved_class_id: -1
+  reserved_class_name: "unknown"
+  confidence_threshold: 0.0   # PROVISIONAL: 0.0 disables rejection. Set from the
+                              # precision/recall-vs-threshold curve on the held-out
+                              # set, never guessed.
+  trained_as_class: false     # true only if negative examples are collected and
+                              # labelled as an explicit background class
+
+classes: []
+  # Fill as:
+  #
+  # - class_id: 0
+  #   name: "<short_snake_case>"
+  #   definition: >
+  #     What physically counts as this class. Include the boundary cases.
+  #   annotation_policy: >
+  #     What an annotator does when a cluster is partially occluded, merged with
+  #     a neighbouring object, or clipped by the ROI box.
+  #   expected_extent_m: [null, null]   # plausible min/max largest dimension, for
+  #                                     # a sanity check against aux features
+  #   notes: null
+
+# Per-class loss weighting. Computed from the training-split class distribution
+# once it exists; recorded here so an experiment is reproducible from config
+# alone. Leave null to use unweighted cross-entropy.
+class_weights: null

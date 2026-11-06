@@ -1,0 +1,98 @@
+{
+  "sensor": {
+    "model": "Livox Mid-70",
+    "fov_deg": 70.4,
+    "solid_angle_sr": 1.1489,
+    "points_per_second": 100000,
+    "frame_rate_hz": 10,
+    "points_per_frame": 10000
+  },
+  "min_cluster_points": 50,
+  "max_usable_range_m": {
+    "1 frame": {
+      "cricket ball": 0.8,
+      "cricket stumps": 5.3,
+      "sports bag / equipment": 6.6,
+      "person (nadir, from above)": 7.8,
+      "person (oblique/side-on)": 12.2,
+      "bench": 14.5,
+      "goalpost (football)": 16.2,
+      "floodlight / fence pole": 20.4,
+      "car (side-on)": 26.4,
+      "practice net": 37.3,
+      "tree canopy (small)": 41.7,
+      "building wall segment": 59.0
+    },
+    "3 frames": {
+      "cricket ball": 1.4,
+      "cricket stumps": 9.1,
+      "sports bag / equipment": 11.4,
+      "person (nadir, from above)": 13.5,
+      "person (oblique/side-on)": 21.1,
+      "bench": 25.0,
+      "goalpost (football)": 28.0,
+      "floodlight / fence pole": 35.4,
+      "car (side-on)": 45.7,
+      "practice net": 64.6,
+      "tree canopy (small)": 72.3,
+      "building wall segment": 102.2
+    }
+  },
+  "targets": {
+    "cricket ball": {
+      "area_m2": 0.0036,
+      "derivation": "72 mm diameter disc"
+    },
+    "cricket stumps": {
+      "area_m2": 0.16,
+      "derivation": "0.71 m tall x 0.23 m wide silhouette"
+    },
+    "sports bag / equipment": {
+      "area_m2": 0.25,
+      "derivation": "~0.6 x 0.4 m"
+    },
+    "person (nadir, from above)": {
+      "area_m2": 0.35,
+      "derivation": "shoulders + head plan view"
+    },
+    "person (oblique/side-on)": {
+      "area_m2": 0.85,
+      "derivation": "1.7 m x 0.5 m silhouette"
+    },
+    "bench": {
+      "area_m2": 1.2,
+      "derivation": "2.0 m x 0.6 m"
+    },
+    "goalpost (football)": {
+      "area_m2": 1.5,
+      "derivation": "crossbar 7.3 m + 2 uprights, 0.12 m section"
+    },
+    "floodlight / fence pole": {
+      "area_m2": 2.4,
+      "derivation": "8 m visible x 0.3 m"
+    },
+    "car (side-on)": {
+      "area_m2": 4.0,
+      "derivation": "4.0 m x 1.0 m visible flank"
+    },
+    "practice net": {
+      "area_m2": 8.0,
+      "derivation": "8 m x 3 m, permeable so returns are partial"
+    },
+    "tree canopy (small)": {
+      "area_m2": 10.0,
+      "derivation": "~3.5 m diameter crown"
+    },
+    "building wall segment": {
+      "area_m2": 20.0,
+      "derivation": "10 m x 2 m of planar wall"
+    }
+  },
+  "caveats": [
+    "Geometry only: assumes the full point budget is spread uniformly over the cone. The non-repetitive rosette is NOT uniform within a single 100 ms frame, so single-frame counts are optimistic.",
+    "Ignores incidence-angle losses. A surface seen edge-on returns far fewer points than its silhouette area implies.",
+    "Ignores occlusion, reflectivity and dropped returns. Dark or wet surfaces return less; the Mid-70's 90 m spec is at 10% reflectivity.",
+    "Multi-frame integration assumes a stationary sensor. While moving, accumulation requires IMU deskewing, which the Mid-70 cannot supply on its own.",
+    "An upper bound, not a prediction. Treat anything within ~2x of the threshold as unproven until measured on real recordings."
+  ]
+}

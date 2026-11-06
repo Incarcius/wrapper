@@ -1,0 +1,26 @@
+# Teacher: wide PointNet. Trained off-device, never deployed.
+#
+# Its only job is to supply a distillation signal to the compact student
+# (Phase Five). It is allowed to be too expensive for the drone.
+#
+# NOTE: this is the PointNet-family teacher. The stronger teachers — DGCNN and
+# PointNet++ (SSG) — land with the Stage 4 comparison study, once labelled data
+# exists to train them on. Whichever validates highest becomes the teacher; the
+# student stays the compact PointNet either way.
+
+model:
+  name: "pointnet"
+  in_channels: 3
+  widths: [64, 64, 128, 256, 1024]   # reference PointNet's 1024-d embedding
+  head_widths: [512, 256]
+  dropout: 0.4                        # more capacity, so more regularisation
+  aux_dim: 0
+  use_input_tnet: true                # affordable here, unlike on-device
+  use_feature_tnet: true
+
+deployment:
+  input_layout: "bcn"
+  device: "cuda"
+  precision: "fp32"
+  warmup_frames: 10
+  max_batch: 16

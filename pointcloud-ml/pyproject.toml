@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pcml"
+version = "0.1.0"
+description = "Per-cluster point-cloud classification for Livox Mid-70 on Jetson Orin Nano."
+requires-python = ">=3.10"
+
+# Runtime (on-drone) dependencies only. numpy is the sole hard requirement of
+# pcml.deploy besides the inference runtime itself.
+dependencies = [
+    "numpy>=1.26",
+    "pyyaml>=6.0",
+]
+
+# torch is deliberately absent: on a Jetson it must come from NVIDIA's JetPack
+# wheel, never PyPI (a PyPI ARM64 torch is CPU-only and the model would silently
+# never touch the GPU). On a dev box, install it from the CPU or CUDA index.
+[project.optional-dependencies]
+train = ["torch>=2.2", "scikit-learn>=1.4", "open3d>=0.18", "tensorboard>=2.15"]
+export = ["onnx>=1.15", "onnxruntime>=1.17"]
+dev = ["pytest>=7"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+filterwarnings = ["error::DeprecationWarning:pcml.*"]

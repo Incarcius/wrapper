@@ -1,0 +1,139 @@
+{
+  "environment": {
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "processor": "x86_64",
+    "python": "3.12.3",
+    "torch": "2.14.1+cpu",
+    "cuda_available": false,
+    "torch_threads": 6,
+    "note": "x86 dev CPU, NOT the Jetson Orin Nano. Deployment latency is pending."
+  },
+  "num_classes": 5,
+  "models": {
+    "pointnet_deploy": {
+      "widths": [
+        64,
+        64,
+        64,
+        128,
+        512
+      ],
+      "head_widths": [
+        256,
+        128
+      ],
+      "parameters": 249413,
+      "checkpoint_mb": 0.975,
+      "cpu_latency_ms": {
+        "1": {
+          "median_ms": 2.7943609998146712,
+          "p95_ms": 7.798460000003615,
+          "min_ms": 2.129786999830685,
+          "max_ms": 9.935347000009642
+        },
+        "4": {
+          "median_ms": 11.152572999890253,
+          "p95_ms": 12.85670300012498,
+          "min_ms": 9.346276999849579,
+          "max_ms": 13.142647999984547
+        },
+        "8": {
+          "median_ms": 20.6758719998561,
+          "p95_ms": 25.12896999996883,
+          "min_ms": 18.914267000127438,
+          "max_ms": 26.065441000127976
+        },
+        "16": {
+          "median_ms": 40.22580600008041,
+          "p95_ms": 46.201053999993746,
+          "min_ms": 36.88545699992574,
+          "max_ms": 46.815843000103996
+        }
+      },
+      "jetson_latency_ms": "pending \u2014 requires on-device measurement"
+    },
+    "pointnet_teacher": {
+      "widths": [
+        64,
+        64,
+        128,
+        256,
+        1024
+      ],
+      "head_widths": [
+        512,
+        256
+      ],
+      "parameters": 1983502,
+      "checkpoint_mb": 7.636,
+      "cpu_latency_ms": {
+        "1": {
+          "median_ms": 9.178350999945906,
+          "p95_ms": 10.297752000042237,
+          "min_ms": 7.108333999894967,
+          "max_ms": 13.536968000153138
+        },
+        "4": {
+          "median_ms": 37.204330000122354,
+          "p95_ms": 40.640323000161516,
+          "min_ms": 34.791872000141666,
+          "max_ms": 45.44507800005704
+        },
+        "8": {
+          "median_ms": 85.7378380001137,
+          "p95_ms": 92.0145570000841,
+          "min_ms": 80.21446200018545,
+          "max_ms": 95.43911100013247
+        },
+        "16": {
+          "median_ms": 178.1559109999762,
+          "p95_ms": 198.39791100002913,
+          "min_ms": 167.57666200010135,
+          "max_ms": 202.17760700006693
+        }
+      },
+      "jetson_latency_ms": "pending \u2014 requires on-device measurement"
+    },
+    "pointnet_student": {
+      "widths": [
+        32,
+        32,
+        64,
+        128
+      ],
+      "head_widths": [
+        128,
+        64
+      ],
+      "parameters": 37349,
+      "checkpoint_mb": 0.158,
+      "cpu_latency_ms": {
+        "1": {
+          "median_ms": 0.6089039998187218,
+          "p95_ms": 1.122236000128396,
+          "min_ms": 0.48066899989862577,
+          "max_ms": 1.475511000080587
+        },
+        "4": {
+          "median_ms": 1.665454999965732,
+          "p95_ms": 2.5843930000064574,
+          "min_ms": 1.0988539997924818,
+          "max_ms": 2.988614999821948
+        },
+        "8": {
+          "median_ms": 2.896388999943156,
+          "p95_ms": 3.848908999998457,
+          "min_ms": 2.3253350000231876,
+          "max_ms": 3.9495979999628616
+        },
+        "16": {
+          "median_ms": 6.001369000159684,
+          "p95_ms": 7.05964100006895,
+          "min_ms": 5.198577999863119,
+          "max_ms": 7.154564999837021
+        }
+      },
+      "jetson_latency_ms": "pending \u2014 requires on-device measurement"
+    }
+  }
+}

@@ -1,0 +1,443 @@
+{
+  "environment": {
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "processor": "x86_64",
+    "python": "3.12.3",
+    "torch": "2.14.1+cpu",
+    "cuda_available": false,
+    "torch_threads": 6,
+    "onnx": "1.23.2",
+    "onnxruntime": "1.31.0",
+    "ort_providers": [
+      "AzureExecutionProvider",
+      "CPUExecutionProvider"
+    ]
+  },
+  "scope": {
+    "verified": [
+      "ONNX export of all requested configs with a dynamic batch axis",
+      "graph op-type inventory against a justified allowlist",
+      "PyTorch vs onnxruntime fp32 logit parity across several M, through one session",
+      "onnxruntime CPU latency"
+    ],
+    "NOT_verified": [
+      "TensorRT engine build (trtexec) \u2014 no NVIDIA GPU, no Jetson access",
+      "TensorRT fp16/int8 numerics",
+      "any on-device latency, memory, power or thermal figure",
+      "accuracy of any kind \u2014 no model is trained and no data exists"
+    ]
+  },
+  "num_classes": 6,
+  "label_map": "data/label_map.yaml",
+  "points_per_region": 1024,
+  "opset": 17,
+  "tolerance": 1e-05,
+  "weights": "random (untrained)",
+  "allowlist": {
+    "Conv": "nn.Conv1d(kernel_size=1), the shared point-wise MLP primitive",
+    "BatchNormalization": "nn.BatchNorm1d in eval mode (affine, running stats). NOT folded into Conv by do_constant_folding; TensorRT fuses Conv+BN at engine-build time",
+    "Relu": "nn.ReLU after every Conv1d/BatchNorm pair and in the head",
+    "ReduceMax": "x.max(dim=2) \u2014 the symmetric aggregation that makes the model permutation-invariant",
+    "GlobalMaxPool": "alternative lowering of the same max-pool; accepted if the exporter picks it",
+    "Gemm": "nn.Linear in the classification head and the T-Net regression head",
+    "MatMul": "torch.bmm(t, x) applying a T-Net alignment matrix (teacher config only)",
+    "Transpose": "layout adjustment the exporter may insert around Gemm/MatMul",
+    "Reshape": "TNet.forward's .view(-1, k, k) on the regressed matrix",
+    "Concat": "torch.cat([embedding, aux], dim=1) when aux_dim > 0",
+    "Identity": "nn.Dropout in eval mode lowers to a no-op Identity rather than disappearing; TensorRT elides it",
+    "Constant": "the Reshape target shape in TNet, and the ReduceMax axes input at opset >= 18. A frozen initializer, not a runtime op"
+  },
+  "models": {
+    "pointnet_deploy": {
+      "path": "artifacts/onnx/pointnet_deploy.onnx",
+      "input_names": [
+        "points"
+      ],
+      "output_names": [
+        "logits"
+      ],
+      "num_points": 1024,
+      "aux_dim": 0,
+      "num_classes": 6,
+      "opset": 17,
+      "dynamic_batch": true,
+      "exporter": "torchscript (dynamo=False)",
+      "op_types": [
+        "BatchNormalization",
+        "Conv",
+        "Gemm",
+        "Identity",
+        "ReduceMax",
+        "Relu"
+      ],
+      "op_types_with_reason": {
+        "BatchNormalization": "nn.BatchNorm1d in eval mode (affine, running stats). NOT folded into Conv by do_constant_folding; TensorRT fuses Conv+BN at engine-build time",
+        "Conv": "nn.Conv1d(kernel_size=1), the shared point-wise MLP primitive",
+        "Gemm": "nn.Linear in the classification head and the T-Net regression head",
+        "Identity": "nn.Dropout in eval mode lowers to a no-op Identity rather than disappearing; TensorRT elides it",
+        "ReduceMax": "x.max(dim=2) \u2014 the symmetric aggregation that makes the model permutation-invariant",
+        "Relu": "nn.ReLU after every Conv1d/BatchNorm pair and in the head"
+      },
+      "unexpected_ops": [],
+      "io_shapes": {
+        "points": [
+          "M",
+          3,
+          1024
+        ],
+        "logits": [
+          "M",
+          6
+        ]
+      },
+      "batch_axis_is_dynamic": true,
+      "warnings_raised": [
+        "DeprecationWarning (export.py:350): You are using the legacy TorchScript-based ONNX export. Starting in PyTorch 2.9, the new torch.export-based ONNX exporter has become the default. Learn more about the new export logic: https://docs.py",
+        "DeprecationWarning (utils.py:218): The feature will be removed. Please remove usage of this function",
+        "TracerWarning (pointnet.py:173): Converting a tensor to a Python boolean might cause the trace to be incorrect. We can't record the data flow of Python values, so this value will be treated as a constant in the future. This means tha"
+      ],
+      "widths": [
+        64,
+        64,
+        64,
+        128,
+        512
+      ],
+      "head_widths": [
+        256,
+        128
+      ],
+      "parameters": 249542,
+      "onnx_kib": 974.8,
+      "parity": {
+        "tolerance": 1e-05,
+        "max_abs_diff": 2.9802322387695312e-08,
+        "mean_abs_diff": 8.183026996751627e-09,
+        "passed": true,
+        "per_batch": {
+          "1": {
+            "max_abs_diff": 1.862645149230957e-08,
+            "mean_abs_diff": 9.313225746154785e-09,
+            "logit_abs_max": 0.0426112599670887,
+            "shape": [
+              1,
+              6
+            ]
+          },
+          "4": {
+            "max_abs_diff": 1.4901161193847656e-08,
+            "mean_abs_diff": 7.664008686939875e-09,
+            "logit_abs_max": 0.0426112562417984,
+            "shape": [
+              4,
+              6
+            ]
+          },
+          "16": {
+            "max_abs_diff": 2.9802322387695312e-08,
+            "mean_abs_diff": 7.571846557160219e-09,
+            "logit_abs_max": 0.047035153955221176,
+            "shape": [
+              16,
+              6
+            ]
+          }
+        }
+      },
+      "ort_cpu_latency_ms": {
+        "1": {
+          "median_ms": 1.0863129999734156,
+          "p95_ms": 1.2757279999959792,
+          "min_ms": 0.9232880000809018,
+          "max_ms": 1.3057620000154202,
+          "per_region_ms": 1.0863129999734156
+        },
+        "4": {
+          "median_ms": 5.0595440000051894,
+          "p95_ms": 5.523273999983758,
+          "min_ms": 3.152449000026536,
+          "max_ms": 6.5132400000038615,
+          "per_region_ms": 1.2648860000012974
+        },
+        "8": {
+          "median_ms": 9.103010999979233,
+          "p95_ms": 10.673891999999796,
+          "min_ms": 5.551683000021512,
+          "max_ms": 10.745074999931603,
+          "per_region_ms": 1.1378763749974041
+        },
+        "16": {
+          "median_ms": 16.544844000009107,
+          "p95_ms": 19.02730699998756,
+          "min_ms": 12.837309000019559,
+          "max_ms": 22.465665000027002,
+          "per_region_ms": 1.0340527500005692
+        }
+      },
+      "jetson_tensorrt": "pending \u2014 requires the device; not measurable here"
+    },
+    "pointnet_teacher": {
+      "path": "artifacts/onnx/pointnet_teacher.onnx",
+      "input_names": [
+        "points"
+      ],
+      "output_names": [
+        "logits"
+      ],
+      "num_points": 1024,
+      "aux_dim": 0,
+      "num_classes": 6,
+      "opset": 17,
+      "dynamic_batch": true,
+      "exporter": "torchscript (dynamo=False)",
+      "op_types": [
+        "BatchNormalization",
+        "Constant",
+        "Conv",
+        "Gemm",
+        "Identity",
+        "MatMul",
+        "ReduceMax",
+        "Relu",
+        "Reshape"
+      ],
+      "op_types_with_reason": {
+        "BatchNormalization": "nn.BatchNorm1d in eval mode (affine, running stats). NOT folded into Conv by do_constant_folding; TensorRT fuses Conv+BN at engine-build time",
+        "Constant": "the Reshape target shape in TNet, and the ReduceMax axes input at opset >= 18. A frozen initializer, not a runtime op",
+        "Conv": "nn.Conv1d(kernel_size=1), the shared point-wise MLP primitive",
+        "Gemm": "nn.Linear in the classification head and the T-Net regression head",
+        "Identity": "nn.Dropout in eval mode lowers to a no-op Identity rather than disappearing; TensorRT elides it",
+        "MatMul": "torch.bmm(t, x) applying a T-Net alignment matrix (teacher config only)",
+        "ReduceMax": "x.max(dim=2) \u2014 the symmetric aggregation that makes the model permutation-invariant",
+        "Relu": "nn.ReLU after every Conv1d/BatchNorm pair and in the head",
+        "Reshape": "TNet.forward's .view(-1, k, k) on the regressed matrix"
+      },
+      "unexpected_ops": [],
+      "io_shapes": {
+        "points": [
+          "M",
+          3,
+          1024
+        ],
+        "logits": [
+          "M",
+          6
+        ]
+      },
+      "batch_axis_is_dynamic": true,
+      "warnings_raised": [
+        "DeprecationWarning (export.py:350): You are using the legacy TorchScript-based ONNX export. Starting in PyTorch 2.9, the new torch.export-based ONNX exporter has become the default. Learn more about the new export logic: https://docs.py",
+        "DeprecationWarning (utils.py:218): The feature will be removed. Please remove usage of this function",
+        "TracerWarning (pointnet.py:173): Converting a tensor to a Python boolean might cause the trace to be incorrect. We can't record the data flow of Python values, so this value will be treated as a constant in the future. This means tha"
+      ],
+      "widths": [
+        64,
+        64,
+        128,
+        256,
+        1024
+      ],
+      "head_widths": [
+        512,
+        256
+      ],
+      "parameters": 1983759,
+      "onnx_kib": 7738.6,
+      "parity": {
+        "tolerance": 1e-05,
+        "max_abs_diff": 3.725290298461914e-08,
+        "mean_abs_diff": 9.573543340795569e-09,
+        "passed": true,
+        "per_batch": {
+          "1": {
+            "max_abs_diff": 2.2351741790771484e-08,
+            "mean_abs_diff": 9.934107462565104e-09,
+            "logit_abs_max": 0.0636395514011383,
+            "shape": [
+              1,
+              6
+            ]
+          },
+          "4": {
+            "max_abs_diff": 2.9802322387695312e-08,
+            "mean_abs_diff": 9.177407870690027e-09,
+            "logit_abs_max": 0.074973464012146,
+            "shape": [
+              4,
+              6
+            ]
+          },
+          "16": {
+            "max_abs_diff": 3.725290298461914e-08,
+            "mean_abs_diff": 9.609114689131578e-09,
+            "logit_abs_max": 0.08525168150663376,
+            "shape": [
+              16,
+              6
+            ]
+          }
+        }
+      },
+      "ort_cpu_latency_ms": {
+        "1": {
+          "median_ms": 5.127049999941846,
+          "p95_ms": 6.056671000010283,
+          "min_ms": 4.3655899999066605,
+          "max_ms": 28.448018000062802,
+          "per_region_ms": 5.127049999941846
+        },
+        "4": {
+          "median_ms": 24.637723000068945,
+          "p95_ms": 27.5505309999744,
+          "min_ms": 21.003234000090742,
+          "max_ms": 28.63158200000271,
+          "per_region_ms": 6.159430750017236
+        },
+        "8": {
+          "median_ms": 43.51240699998016,
+          "p95_ms": 54.00415400004022,
+          "min_ms": 32.28729199997815,
+          "max_ms": 67.34620400004587,
+          "per_region_ms": 5.43905087499752
+        },
+        "16": {
+          "median_ms": 93.19912700004807,
+          "p95_ms": 118.71333499993852,
+          "min_ms": 78.51631800008363,
+          "max_ms": 152.33196500003032,
+          "per_region_ms": 5.824945437503004
+        }
+      },
+      "jetson_tensorrt": "pending \u2014 requires the device; not measurable here"
+    },
+    "pointnet_student": {
+      "path": "artifacts/onnx/pointnet_student.onnx",
+      "input_names": [
+        "points"
+      ],
+      "output_names": [
+        "logits"
+      ],
+      "num_points": 1024,
+      "aux_dim": 0,
+      "num_classes": 6,
+      "opset": 17,
+      "dynamic_batch": true,
+      "exporter": "torchscript (dynamo=False)",
+      "op_types": [
+        "BatchNormalization",
+        "Conv",
+        "Gemm",
+        "Identity",
+        "ReduceMax",
+        "Relu"
+      ],
+      "op_types_with_reason": {
+        "BatchNormalization": "nn.BatchNorm1d in eval mode (affine, running stats). NOT folded into Conv by do_constant_folding; TensorRT fuses Conv+BN at engine-build time",
+        "Conv": "nn.Conv1d(kernel_size=1), the shared point-wise MLP primitive",
+        "Gemm": "nn.Linear in the classification head and the T-Net regression head",
+        "Identity": "nn.Dropout in eval mode lowers to a no-op Identity rather than disappearing; TensorRT elides it",
+        "ReduceMax": "x.max(dim=2) \u2014 the symmetric aggregation that makes the model permutation-invariant",
+        "Relu": "nn.ReLU after every Conv1d/BatchNorm pair and in the head"
+      },
+      "unexpected_ops": [],
+      "io_shapes": {
+        "points": [
+          "M",
+          3,
+          1024
+        ],
+        "logits": [
+          "M",
+          6
+        ]
+      },
+      "batch_axis_is_dynamic": true,
+      "warnings_raised": [
+        "DeprecationWarning (export.py:350): You are using the legacy TorchScript-based ONNX export. Starting in PyTorch 2.9, the new torch.export-based ONNX exporter has become the default. Learn more about the new export logic: https://docs.py",
+        "DeprecationWarning (utils.py:218): The feature will be removed. Please remove usage of this function",
+        "TracerWarning (pointnet.py:173): Converting a tensor to a Python boolean might cause the trace to be incorrect. We can't record the data flow of Python values, so this value will be treated as a constant in the future. This means tha"
+      ],
+      "widths": [
+        32,
+        32,
+        64,
+        128
+      ],
+      "head_widths": [
+        128,
+        64
+      ],
+      "parameters": 37414,
+      "onnx_kib": 148.1,
+      "parity": {
+        "tolerance": 1e-05,
+        "max_abs_diff": 2.9802322387695312e-08,
+        "mean_abs_diff": 9.177407870690027e-09,
+        "passed": true,
+        "per_batch": {
+          "1": {
+            "max_abs_diff": 1.862645149230957e-08,
+            "mean_abs_diff": 9.313225746154785e-09,
+            "logit_abs_max": 0.1433470994234085,
+            "shape": [
+              1,
+              6
+            ]
+          },
+          "4": {
+            "max_abs_diff": 2.9802322387695312e-08,
+            "mean_abs_diff": 7.761021455128988e-09,
+            "logit_abs_max": 0.17474249005317688,
+            "shape": [
+              4,
+              6
+            ]
+          },
+          "16": {
+            "max_abs_diff": 2.9802322387695312e-08,
+            "mean_abs_diff": 1.045797641078631e-08,
+            "logit_abs_max": 0.18142028152942657,
+            "shape": [
+              16,
+              6
+            ]
+          }
+        }
+      },
+      "ort_cpu_latency_ms": {
+        "1": {
+          "median_ms": 0.22273899992342194,
+          "p95_ms": 0.3279750000046988,
+          "min_ms": 0.18865999993522564,
+          "max_ms": 0.36093000005621434,
+          "per_region_ms": 0.22273899992342194
+        },
+        "4": {
+          "median_ms": 0.8798910000678006,
+          "p95_ms": 1.210647999982939,
+          "min_ms": 0.5365029999211401,
+          "max_ms": 1.7584260000376162,
+          "per_region_ms": 0.21997275001695016
+        },
+        "8": {
+          "median_ms": 1.8198469999788358,
+          "p95_ms": 2.236405000076047,
+          "min_ms": 1.203894000013861,
+          "max_ms": 2.759903000082886,
+          "per_region_ms": 0.22748087499735448
+        },
+        "16": {
+          "median_ms": 3.4916280000061306,
+          "p95_ms": 17.08392199998343,
+          "min_ms": 2.7574850000746665,
+          "max_ms": 24.171161999902324,
+          "per_region_ms": 0.21822675000038316
+        }
+      },
+      "jetson_tensorrt": "pending \u2014 requires the device; not measurable here"
+    }
+  },
+  "passed": true,
+  "failures": []
+}

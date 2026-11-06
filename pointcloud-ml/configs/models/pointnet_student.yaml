@@ -1,0 +1,22 @@
+# Aggressive student: the efficiency-oriented arm of the comparison.
+#
+# Trained twice — from scratch, and by distillation from the teacher — so the
+# distillation gain is measured against an equivalent baseline rather than
+# assumed (Phase Five acceptance criteria).
+
+model:
+  name: "pointnet"
+  in_channels: 3
+  widths: [32, 32, 64, 128]
+  head_widths: [128, 64]
+  dropout: 0.2
+  aux_dim: 0
+  use_input_tnet: false
+  use_feature_tnet: false
+
+deployment:
+  input_layout: "bcn"
+  device: "cuda"
+  precision: "fp16"
+  warmup_frames: 10
+  max_batch: 16

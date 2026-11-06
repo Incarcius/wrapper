@@ -1,0 +1,11 @@
+# Build outputs, not source. `scripts/export_model.py` regenerates everything
+# here from a config (plus a checkpoint, once one exists).
+#
+# Worth being explicit about why these must never be committed: the .onnx files
+# currently in here hold RANDOMLY INITIALISED weights, because no model has been
+# trained. A committed random-weight engine is exactly the kind of artifact that
+# later gets mistaken for a trained one.
+*.onnx
+*.engine
+*.plan
+*.trt
