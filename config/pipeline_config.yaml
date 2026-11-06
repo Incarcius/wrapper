@@ -1,57 +1,229 @@
-# Pipeline configuration - tune these on-device with real flight data.
-# Every stage is toggleable so you can profile latency stage-by-stage on the Nano.
+# =============================================================================
+# livox_wrapper pipeline configuration
+#
+# Tune on-device with real data. Every stage can be switched off independently,
+# so you can profile latency stage-by-stage on the Jetson Orin Nano
+# (per-stage timings are logged every `logging.log_every_n_frames` frames, with
+# the cluster count M on the same line).
+#
+# This file is validated in full at startup — unknown keys and out-of-range
+# values are startup errors, not frame-3000 crashes (code_review.md I6).
+#
+# Known issues affecting some of these settings are listed in
+# docs/code_review.md and pointcloud-ml/docs/wrapper_audit.md; the relevant
+# finding is noted next to each key.
+# =============================================================================
 
+# All sampling is deterministic given this seed (finding A1). Record it in the
+# experiment manifest: after the per-cluster re-scoping most clusters hold fewer
+# than target_points points, so the random-padding path is the common case and
+# an unseeded run gives a different model input every time.
+seed: 0
+
+# --- Stage 0: where frames come from -----------------------------------------
 ingestion:
-  mode: "ros2"            # "ros2" | "sdk"  (ros2 = livox_ros_driver topic, sdk = direct livox_sdk bindings)
-  ros2_topic: "/livox/lidar"
-  frame_queue_size: 2      # bounded queue; older frames are dropped, not processed late
-  drop_stale_after_sec: 0.15  # if a frame waits longer than this, drop it instead of processing
+  mode: "ros2"                # "ros2" = subscribe to livox_ros2_driver | "sdk" = direct bindings (stub, not implemented)
+  ros2_topic: "/livox/lidar"  # sensor_msgs/PointCloud2 topic published by the driver
+  frame_queue_size: 2         # bounded queue; when full, the oldest frame is dropped
+  drop_stale_after_sec: 0.15  # drop frames whose header stamp is older than this, measured against
+                              # the Jetson's wall clock (see code_review.md C3 before relying on it)
 
+# --- Stage 1: region-of-interest crop (cheapest stage, runs first) ------------
 roi_filter:
   enabled: true
-  mode: "box"              # "box" | "range" | "none"
-  # --- IMPORTANT FOR PRODUCTION (CITY SCALE) ---
-  # The limits below (±10m) are heavily shrunk for indoor classroom PoW testing.
-  # When transitioning to city-scale flights, you MUST expand these (e.g. ±100m)
-  # AND increase `voxel_size_m` significantly so the Orin Nano doesn't crash.
-  # ---------------------------------------------
-  # box filter in sensor/body frame, meters
-  x_min: -10.0
-  x_max: 10.0
-  y_min: -10.0
-  y_max: 10.0
-  z_min: -2.0
-  z_max: 3.0
-  # range filter alternative
-  max_range_m: 40.0
+  mode: "box"                 # "box" | "range" | "none"
+  #
+  # PROVISIONAL AND DELIBERATELY PERMISSIVE — these need the owner's numbers.
+  #
+  # The previous values (±10 m, z -2..3) were sized for indoor/classroom
+  # proof-of-work testing and are wrong for the confirmed scene, a college
+  # cricket/football field. Two concrete failures:
+  #   * z_max: 3.0 decapitated floodlight masts and mature trees. The confirmed
+  #     label map gives `pole` and `vegetation` an expected_extent_m up to 15 m,
+  #     so a 3 m ceiling cut the top off both classes and left a stump that
+  #     clusters as something else.
+  #   * A ±10 m box sees a patch of grass. A college field is 100–150 m across,
+  #     so almost every real object sat outside the crop.
+  #
+  # The box below is a generous superset instead of a guess at the real one. The
+  # asymmetry is the reason: an over-tight ROI deletes objects silently and the
+  # loss is unrecoverable, while an over-wide one only costs latency and shows up
+  # in the stage timings. So it is sized to not be able to clip anything, and it
+  # should be TIGHTENED once the real numbers exist.
+  #
+  # To set these properly you need P5 from docs/task_definition.md, still
+  # unresolved: the flight regime, the sensor's mounting orientation, and the
+  # flight altitude. Those decide the sign and range of z in particular — the
+  # ROI is in the SENSOR frame, and nothing in this wrapper transforms to body or
+  # world, so a nadir-mounted sensor at altitude sees the field at large negative
+  # z while a forward-looking one at head height sees it near zero. Until that is
+  # fixed, these limits are not measured and must not be quoted as tuned.
+  #
+  # Box limits, in the sensor frame, metres:
+  x_min: -75.0
+  x_max: 75.0
+  y_min: -75.0
+  y_max: 75.0
+  z_min: -30.0
+  z_max: 30.0
+  # Used only when mode: "range" — a SPHERICAL radius centred on the sensor,
+  # not a cylinder (finding A3). For a forward- or downward-looking drone sensor
+  # a horizontal radius with separate height limits is usually what is meant;
+  # use mode: "box" for that. Metres:
+  #
+  # 90 m is the Mid-70's datasheet range at 10% reflectivity, i.e. the sensor's
+  # own limit rather than a scene-derived choice — so this crops nothing in
+  # practice and is a bound, not a tuning. Note the point rate is fixed
+  # (~100k pts/s): a wider ROI makes each frame sparser, not larger. For
+  # reference, the label map puts `structure` as the furthest-resolvable class at
+  # ~59 m single-frame and `person` at only ~8–12 m, so useful detections stop
+  # well inside this radius.
+  max_range_m: 90.0
 
+# --- Stage 2: outlier / noise removal ----------------------------------------
+# Noise rejection only. Instance separation is the clustering stage below: this
+# stage's DBSCAN labels are discarded.
 outlier_removal:
-  method: "open3d_statistical"   # "open3d_statistical" | "open3d_radius" | "dbscan" | "none"
-  # open3d statistical outlier removal
+  method: "open3d_statistical"  # "open3d_statistical" | "open3d_radius" | "dbscan" | "none"
+  # open3d_statistical: drop points whose mean neighbour distance is unusually large
   nb_neighbors: 16
   std_ratio: 1.5
-  # open3d radius removal (cheaper, good default on Nano)
+  # open3d_radius: drop points with fewer than N neighbours within `radius` (cheaper)
   radius_nb_points: 6
   radius: 0.6
-  # DBSCAN (paper defaults) - slow on Jetson Nano for full frames, use only if latency budget allows
-  # or on pre-downsampled clouds
+  # dbscan: reference-paper defaults. Slow on full frames; needs scikit-learn.
   dbscan_eps: 0.5
   dbscan_min_points: 10
-  pre_voxel_downsample_for_dbscan: 0.15   # voxel size (m) applied before DBSCAN to keep it tractable
+  pre_voxel_downsample_for_dbscan: 0.15  # voxel size (m) applied before DBSCAN to keep it tractable
 
+# --- Stage 3: ground-plane removal -------------------------------------------
+# MANDATORY for this scene, not an ablation. A mown field is a continuous dense
+# sheet of returns; at the 0.5 m clustering radius below, every object standing
+# on it is connected to the grass and therefore to every other object, so DBSCAN
+# collapses the whole frame into one component. Measured both ways in
+# pointcloud-ml/tests/test_ground.py and wrapper/tests/test_pipeline.py.
+#
+# Mirror of the `ground_removal:` section in pointcloud-ml/configs/preprocess.yaml,
+# which is the source of truth — the training path removes ground with these
+# parameters, and a mismatch here is train/inference skew. The classifier applies
+# the same stage inside ClusterClassifier.classify_frame, so both entry points
+# agree on what the clustering stage sees.
+ground_removal:
+  enabled: true
+  method: "ransac_plane"            # the only implemented method (pcml.data.ground);
+                                    # a NumPy RANSAC rather than Open3D's segment_plane,
+                                    # because it is deterministic given a seeded generator
+  distance_threshold_m: 0.15        # inlier half-thickness; suits mown grass plus sensor
+                                    # noise. Too small chases noise, too large eats the
+                                    # bottom of every object standing on the ground.
+  num_iterations: 200               # RANSAC trials
+  max_tilt_deg: 30.0                # horizontality gate: rejects candidate planes whose
+                                    # normal is further than this from the sensor's +z.
+                                    # This is what stops the fit latching onto the
+                                    # pavilion wall or a practice net, which are also
+                                    # large and planar. 30 deg allows for real drone
+                                    # attitude and a sloped field.
+  min_inlier_fraction: 0.15         # below this, report NO plane and delete nothing:
+                                    # removing a wrongly-fitted "ground" would delete
+                                    # real objects, so the stage declines rather than
+                                    # guesses. That outcome is logged, not silent.
+  min_height_m: 0.15                # extra clearance above the inlier band. Trims the
+                                    # ground skirt at the base of each object, which is
+                                    # what otherwise bridges two adjacent clusters; the
+                                    # cost is losing the lowest part of short objects.
+
+# --- Stage 4: instance clustering (scene -> M objects) -----------------------
+# This stage is the fix for C2. Without it the whole ±10 m ROI is normalised
+# into one unit sphere and handed to a classifier trained on single objects.
+# Keep these values consistent with the `region_proposal:` section of
+# pointcloud-ml/configs/preprocess.yaml, which is the source of truth: the
+# training path divides scenes with those parameters, and a mismatch here is
+# train/inference skew that no test will catch. The names differ because that
+# section was renamed from `clustering:` upstream and made pluggable
+# (dbscan_instances | ground_tiles); the mapping is
+#   eps_m              -> region_proposal.eps_m
+#   min_samples        -> region_proposal.min_samples
+#   min_cluster_points -> region_proposal.min_region_points
+#   max_clusters_per_frame -> region_proposal.max_regions
+# Only the dbscan_instances method is mirrored here. If preprocess.yaml selects
+# ground_tiles, this wrapper's clustering stage is the wrong one and the frame
+# must be handed to ClusterClassifier.classify_frame instead, which honours the
+# configured proposer.
+clustering:
+  enabled: true               # false = whole-scene mode. DEBUGGING ONLY — it
+                              # reproduces the C2 defect on purpose.
+  eps_m: 0.5                  # DBSCAN neighbourhood radius, METRES
+  min_samples: 10             # DBSCAN core-point threshold
+  min_cluster_points: 50      # PROVISIONAL: below this, decline to classify rather than
+                              # guess. Resampling a 20-point cluster to 1024 is ~98%
+                              # duplicates and carries almost no shape information.
+  max_clusters_per_frame: 16  # PROVISIONAL: bounds worst-case latency and memory.
+                              # Must equal the classifier's deployment.max_clusters —
+                              # the preallocated batch is sized from it. Re-derive both
+                              # from measured cluster-count distributions on real
+                              # recordings (task_definition.md P6).
+  use_open3d: true            # Open3D's C++ cluster_dbscan; much faster on-device.
+                              # Falls back to scikit-learn when Open3D is unavailable.
+
+# --- Stage 5: normalisation (PER CLUSTER, after resampling) ------------------
+# Applied to each cluster independently, as the last step before the network —
+# which is what the model is trained on (findings C1 and C2). Absolute scale is
+# destroyed here on purpose; the scale-carrying information is preserved in the
+# auxiliary feature vector instead (preprocess.yaml features.use_aux).
 normalization:
-  center: true              # zero-mean centering (subtract centroid)
-  scale_to_unit_sphere: true
+  center: true                # subtract each cluster's own centroid
+  scale_to_unit_sphere: true  # scale each cluster so its farthest point lies on radius 1
 
+# --- Stage 6: resample each cluster to a fixed point count -------------------
 downsampling:
-  voxel_size_m: 0.15         # first-pass voxel downsample to bound point count before FPS
-  target_points: 1024        # final FPS output size
-  method: "open3d_fps"       # "open3d_fps" | "random" (random = fallback if too few points survive)
+  voxel_size_m: 0.05          # voxel pre-pass to bound FPS cost. METRES, applied to the
+                              # raw cluster BEFORE normalisation (C1 fixed; this key used
+                              # to act in unit-sphere units). null disables it. Declined
+                              # automatically when it would leave fewer than target_points.
+  target_points: 1024         # points per cluster handed to the classifier
+  method: "open3d_fps"        # "open3d_fps" (Open3D's C++ farthest point sampling) |
+                              # "numpy_fps" (pcml's reference implementation: same
+                              # semantics, slower, reproducible across Open3D versions —
+                              # use it for export-parity tests). Without Open3D,
+                              # "open3d_fps" falls back to "numpy_fps" and says so.
+                              # The old "random" value is rejected at startup with the
+                              # replacement named; see pipeline._downsampling_method.
 
+# --- Stage 7: the classifier -------------------------------------------------
+model:
+  enabled: true
+  # Deploy config for pcml.deploy.classifier.ClusterClassifier: it owns the
+  # checkpoint, the label map, the architecture and the tensor layout. Path is
+  # relative to the working directory (repository root, as in the usage line in
+  # cli.py).
+  #
+  # The default below points at the PLACEHOLDER config: no class list (P1) and
+  # no labelled data (P2) have been supplied, so it builds a randomly
+  # initialised model over a placeholder vocabulary. That makes the end-to-end
+  # path runnable and its latency measurable. Its class outputs are NOT
+  # predictions. Point this at a real deploy config once a checkpoint exists.
+  classifier_config: "../pointcloud-ml/configs/deploy_placeholder.yaml"
+  warmup_frames: 10           # synthetic frames run before the loop starts, so the first
+                              # real frame is not charged for CUDA context creation and
+                              # kernel autotuning. Mandatory on Jetson.
+  publish:                    # ROS 2 output (finding I8): the first version subscribed
+                              # and never published anything.
+    enabled: true             # false to run the pipeline without a ROS 2 publisher
+    topic: "/livox/detections"
+    frame_id: "livox_frame"   # the LIVOX SENSOR frame: nothing here transforms to body
+                              # or world, so the centroids are sensor-frame metres
+    queue_depth: 2            # shallow on purpose: a stale detection is worse than a
+                              # dropped one on a moving platform
+    message: "vision_msgs/Detection3DArray"  # informational; the only supported message.
+                              # Classification2D cannot carry per-instance geometry.
+
+# --- Output ------------------------------------------------------------------
 output:
-  format: "numpy"            # "numpy" | "torch"
-  dtype: "float32"
+  format: "numpy"             # "numpy" only. Tensor creation, layout and device are the
+                              # classifier adapter's job now (finding I5) — set
+                              # deployment.input_layout in the deploy config instead.
+  dtype: "float32"            # "float32" only; float64 upcasting was finding A2
 
 logging:
-  log_stage_timings: true    # per-stage latency logging, useful for Nano profiling
+  log_stage_timings: true     # per-stage latency log line, including the cluster count M
   log_every_n_frames: 30

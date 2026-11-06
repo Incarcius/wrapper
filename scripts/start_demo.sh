@@ -1,20 +1,24 @@
 #!/bin/bash
 # ==============================================================================
 # start_demo.sh
-# 
-# Automated startup script for the Livox LiDAR point cloud pipeline on Jetson Nano.
-# This script sources ROS2, launches the Livox driver, and starts the ML pipeline.
+#
+# Startup script for the Livox Mid-70 preprocessing pipeline on a Jetson Orin
+# Nano: sources ROS 2, launches the Livox driver, then starts the pipeline.
+#
+# Run from anywhere:   ./scripts/start_demo.sh
 # ==============================================================================
 
 # --- CONFIGURATION ---
-# Edit these paths to match your actual Jetson Nano environment!
-ROS2_DISTRO="foxy"                     # Usually 'foxy' or 'humble' on Jetson
-ROS2_WORKSPACE="$HOME/ros2_ws"         # Path to your ROS2 workspace containing livox_ros_driver
-PYTHON_EXEC="python3"                  # 'python3' or path to a venv (e.g., 'venv/bin/python')
+# Edit these to match your Jetson environment.
+ROS2_DISTRO="${ROS_DISTRO:-humble}"    # JetPack 6 = Ubuntu 22.04 = ROS 2 Humble
+ROS2_WORKSPACE="$HOME/ros2_ws"         # workspace containing livox_ros2_driver
+DRIVER_PKG="livox_ros2_driver"         # Mid-70 driver (Livox SDK 1); see docs/setup_guide.md
+DRIVER_LAUNCH="livox_lidar_launch.py"  # publishes sensor_msgs/PointCloud2, no RViz
+PYTHON_EXEC="python3"                  # 'python3' or a venv interpreter, e.g. 'venv/bin/python'
 # ---------------------
 
 echo "================================================="
-echo " Starting Livox Mid-70 Wrapper & DGCNN Pipeline  "
+echo " Starting Livox Mid-70 preprocessing pipeline    "
 echo "================================================="
 
 # 0. Check Python dependencies
@@ -43,13 +47,14 @@ if [ -f "$ROS2_WORKSPACE/install/setup.bash" ]; then
     source "$ROS2_WORKSPACE/install/setup.bash"
 else
     echo "[WARNING] Local workspace setup not found at $ROS2_WORKSPACE/install/setup.bash"
-    echo "          (Ignore this if the livox_ros_driver is installed system-wide)"
+    echo "          (Ignore this if $DRIVER_PKG is installed system-wide)"
 fi
 
 # 3. Launch the Livox ROS2 Driver in the background
-#    (Modify the launch command below if your version of the driver uses a different launch file)
-echo "[INFO] Launching livox_ros_driver..."
-ros2 launch livox_ros_driver livox_lidar_launch.py > /dev/null 2>&1 &
+#    NOTE: driver output is discarded. If no frames arrive, run the launch
+#    command by hand in another terminal to see its errors (docs/demo_runbook.md).
+echo "[INFO] Launching $DRIVER_PKG..."
+ros2 launch "$DRIVER_PKG" "$DRIVER_LAUNCH" > /dev/null 2>&1 &
 DRIVER_PID=$!
 echo "[INFO] Driver started in background (PID: $DRIVER_PID)."
 
@@ -57,13 +62,14 @@ echo "[INFO] Driver started in background (PID: $DRIVER_PID)."
 echo "[INFO] Waiting 3 seconds for LiDAR initialization..."
 sleep 3
 
-# 4. Start the Python Processing Pipeline
+# 4. Start the Python processing pipeline from the repository root
 echo "[INFO] Starting Python processing pipeline..."
-# Change to the directory where this bash script is located
-cd "$(dirname "$0")" || exit
+cd "$(dirname "$0")/.." || exit 1
 
-# Run the pipeline (assumes src/run_pipeline.py and config/pipeline_config.yaml exist here)
-$PYTHON_EXEC src/run_pipeline.py --config config/pipeline_config.yaml
+# Prepend src/ so the package imports without `pip install`. Keep the existing
+# PYTHONPATH: ROS 2's setup.bash puts rclpy on it.
+export PYTHONPATH="$(pwd)/src${PYTHONPATH:+:$PYTHONPATH}"
+$PYTHON_EXEC -m livox_wrapper --config config/pipeline_config.yaml
 
 # 5. Cleanup when Python script exits (e.g., when you press Ctrl+C)
 echo "================================================="

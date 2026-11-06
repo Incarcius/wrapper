@@ -1,12 +1,23 @@
+# Runtime dependencies for the wrapper. On the Jetson:
+#   pip3 install -r requirements.txt
+# See docs/setup_guide.md for the full setup, including PyTorch and ROS 2.
+
 numpy>=1.23
-open3d>=0.18       # provides fast statistical/radius outlier removal and C++ FPS
-scikit-learn>=1.2  # only needed if outlier_removal.method == "dbscan"
+open3d>=0.18       # fast statistical/radius outlier removal and C++ FPS
 pyyaml>=6.0
-torch>=2.0         # Required for DGCNN inference in PyTorch
+scikit-learn>=1.2  # only needed if outlier_removal.method == "dbscan"
+
+# --- Deliberately NOT installed from this file -----------------------------
 #
-# ROS2 ingestion (mode: "ros2") is provided by your ROS2 distro + livox_ros_driver,
-# not pip — install per: https://github.com/Livox-SDK/livox_ros_driver
-# rclpy and sensor_msgs_py come from the ROS2 install itself.
+# torch: do NOT pip-install on the Jetson. PyPI has no CUDA build for Jetson,
+#   so the model would silently run on the CPU. Install NVIDIA's JetPack wheel:
+#   https://forums.developer.nvidia.com/t/pytorch-for-jetson
+#   (Only needed once a classifier is wired in, or for output.format: "torch".)
 #
-# SDK ingestion (mode: "sdk") requires the Livox SDK Python bindings matching
-# your firmware/SDK version — see https://github.com/Livox-SDK/Livox-SDK
+# rclpy, sensor_msgs_py: provided by the ROS 2 install (ros-humble-ros-base).
+#
+# livox_ros2_driver: built from source in your ROS 2 workspace.
+#   https://github.com/Livox-SDK/livox_ros2_driver
+#
+# SDK ingestion (mode: "sdk") needs Livox SDK Python bindings matching your
+# firmware/SDK version: https://github.com/Livox-SDK/Livox-SDK

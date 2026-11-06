@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "livox-wrapper"
+version = "0.1.0"
+description = "Real-time preprocessing pipeline for Livox Mid-70 point clouds on Jetson Orin Nano (ROS 2)."
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "numpy>=1.23",
+    "open3d>=0.18",
+    "pyyaml>=6.0",
+    # Clustering, sampling and the deployed classifier live in the sibling
+    # pointcloud-ml repository (see its docs/wrapper_audit.md §5 for the
+    # ownership boundary). It is not on PyPI: install it from a checkout with
+    # `pip install -e ../pointcloud-ml`, or from the wheel built for the Jetson.
+    # "pcml>=0.1",
+]
+
+# PyTorch is intentionally not listed: on a Jetson it must come from NVIDIA's
+# JetPack wheel, not PyPI (see docs/setup_guide.md). rclpy, sensor_msgs_py and
+# vision_msgs come from the ROS 2 install, not pip.
+
+[project.optional-dependencies]
+dbscan = ["scikit-learn>=1.2"]   # only for outlier_removal.method: "dbscan"
+dev = ["pytest>=7"]
+
+[project.scripts]
+livox-wrapper = "livox_wrapper.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

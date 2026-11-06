@@ -5,7 +5,7 @@ Feeds raw point-cloud frames from the Mid-70 into the processing pipeline.
 
 Two backends:
   - "ros2": subscribes to a sensor_msgs/PointCloud2 topic published by
-    livox_ros_driver (recommended — handles device bring-up, timestamps,
+    livox_ros2_driver (recommended — handles device bring-up, timestamps,
     and plays nicely with the rest of a drone's ROS2 stack).
   - "sdk": talks to livox_sdk Python bindings directly, for setups without ROS2.
 
@@ -25,7 +25,7 @@ from typing import Callable, Optional
 
 import numpy as np
 
-logger = logging.getLogger("livox_interface")
+logger = logging.getLogger(__name__)
 
 
 class LivoxInterface:
@@ -98,7 +98,7 @@ class LivoxInterface:
         except ImportError as e:
             raise RuntimeError(
                 "ROS2 ingestion mode requires rclpy + sensor_msgs_py "
-                "(source your ROS2 environment / install livox_ros_driver)."
+                "(source your ROS2 environment / install livox_ros2_driver)."
             ) from e
 
         parent = self
