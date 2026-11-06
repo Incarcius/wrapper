@@ -1,0 +1,52 @@
+name: tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.10 is what JetPack 6 ships, so it is the deployment Python; 3.12 is
+        # what development happens on. Testing both is what catches a
+        # version-dependent break here rather than on the device.
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy pyyaml pytest scikit-learn
+          pip install --index-url https://download.pytorch.org/whl/cpu torch
+          pip install onnx onnxruntime
+
+      # open3d is deliberately NOT installed. Every code path falls back to
+      # NumPy or scikit-learn when it is absent, and running CI without it means
+      # those fallbacks are exercised on every push rather than assumed to work.
+      - name: Report environment
+        run: |
+          python -c "import sys, numpy, torch; print(sys.version); print('numpy', numpy.__version__); print('torch', torch.__version__)"
+          python -c "import importlib.util as u; print('open3d present:', u.find_spec('open3d') is not None)"
+
+      # One process at a time: several tests assert on the content and sha256 of
+      # the real data/label_map.yaml and configs/preprocess.yaml, so concurrent
+      # runs would race on that shared read-only state.
+      - name: pointcloud-ml
+        working-directory: pointcloud-ml
+        run: python -m pytest -q -p no:cacheprovider
+
+      - name: wrapper
+        working-directory: wrapper
+        run: python -m pytest -q -p no:cacheprovider

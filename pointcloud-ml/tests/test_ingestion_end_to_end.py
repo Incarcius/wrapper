@@ -1,4 +1,4 @@
-﻿"""The whole ingestion path, on a synthetic multi-session recording set.
+"""The whole ingestion path, on a synthetic multi-session recording set.
 
 This is the test that says the toolchain is ready for the first real bag. It
 runs, in one go:

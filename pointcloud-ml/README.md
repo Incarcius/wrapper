@@ -50,6 +50,7 @@ pointcloud-ml/
     distillation_plan.md         Phase Five method, and when to skip it
     publication_scope.md         what would make the study publishable, and what would not
     publication_pipeline.md      the ordered stages, their gates, and the venue call
+    preregistration.md           hypotheses, metric, min_effect and decision rule, dated
   reports/
     stage1_baseline.md           measured parameters / size / CPU latency
     model_summary.json           raw output of scripts/model_summary.py

@@ -1,4 +1,4 @@
-﻿"""Label-map validation: every rule corresponds to a way a checkpoint goes wrong."""
+"""Label-map validation: every rule corresponds to a way a checkpoint goes wrong."""
 
 from __future__ import annotations
 
